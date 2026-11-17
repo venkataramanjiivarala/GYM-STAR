@@ -11,7 +11,7 @@ export default function Navigation({ activeTab, setActiveTab }) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F172A]/95 backdrop-blur-lg border-t border-slate-800 px-3 py-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0B0F19]/95 backdrop-blur-lg border-t border-[#263554] px-3 py-2">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {tabs.map((t) => {
           const Icon = t.icon;
@@ -26,7 +26,7 @@ export default function Navigation({ activeTab, setActiveTab }) {
                   isActive ? 'scale-105' : 'hover:scale-105'
                 } transition-all duration-200`}
               >
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 border-2 border-[#0F172A]">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 border-2 border-[#0B0F19]">
                   <Camera className="w-7 h-7 text-white" />
                 </div>
                 <span className="text-[11px] font-bold text-emerald-400 mt-1">AI Coach</span>

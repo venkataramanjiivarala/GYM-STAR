@@ -9,11 +9,11 @@ enum JointFormStatus {
 }
 
 class JointEvaluation {
-  final String landmarkName; // e.g. 'LEFT_KNEE', 'RIGHT_KNEE', 'LEFT_ELBOW'
-  final double angle; // Measured angle in degrees
+  final String landmarkName;
+  final double angle;
   final JointFormStatus status;
   final String feedback;
-  final String? label; // e.g. "Knee 88°"
+  final String? label;
 
   const JointEvaluation({
     required this.landmarkName,
@@ -44,10 +44,26 @@ class BiometricPoint {
   }
 }
 
+class RepDetail {
+  final int repNumber;
+  final double accuracyScore;
+  final bool isClean;
+  final String feedback;
+  final double durationSec;
+
+  const RepDetail({
+    required this.repNumber,
+    required this.accuracyScore,
+    required this.isClean,
+    required this.feedback,
+    this.durationSec = 2.5,
+  });
+}
+
 class PoseAnalysisResult {
   final int repCount;
   final double formScore;
-  final String status; // "GOOD", "WARNING", "INCORRECT"
+  final String status; // "GOOD", "WARNING", "INCORRECT", "POSITIONING"
   final String feedbackMessage;
   final String repState;
   final String activeJointName;
@@ -55,6 +71,12 @@ class PoseAnalysisResult {
   final bool repCompletedJustNow;
   final String? voiceCue;
   final int holdSeconds;
+  final bool isPersonDetected;
+  final bool isFullBodyInFrame;
+  final String positioningInstruction;
+  final bool isMismatch;
+  final String? mismatchAlert;
+  final List<RepDetail> repHistory;
   final Map<String, JointEvaluation> jointEvaluations;
   final Map<String, JointFormStatus> boneEvaluations;
 
@@ -69,6 +91,12 @@ class PoseAnalysisResult {
     this.repCompletedJustNow = false,
     this.voiceCue,
     this.holdSeconds = 0,
+    this.isPersonDetected = true,
+    this.isFullBodyInFrame = true,
+    this.positioningInstruction = '',
+    this.isMismatch = false,
+    this.mismatchAlert,
+    this.repHistory = const [],
     this.jointEvaluations = const {},
     this.boneEvaluations = const {},
   });
@@ -76,13 +104,24 @@ class PoseAnalysisResult {
 
 class PoseAnalyzerEngine {
   int _repCount = 0;
-  String _repState = "READY"; // READY, DOWN, UP, HOLDING
-  double _formScore = 95.0;
-  String _status = "GOOD";
-  String _feedbackMessage = "Ready - Stand in camera view";
-  String _activeJointName = "Knee Angle";
-  double _activeJointAngle = 180.0;
+  String _repState = "POSITIONING"; // POSITIONING, READY, DOWN, UP, HOLDING
+  double _formScore = 0.0;
+  String _status = "POSITIONING";
+  String _feedbackMessage = "Position yourself in camera view";
+  String _activeJointName = "Camera Calibration";
+  double _activeJointAngle = 0.0;
   int _holdTicks = 0;
+
+  // Real-time rep-by-rep tracking
+  final List<RepDetail> _repHistory = [];
+  double _currentRepAccuracyMin = 100.0;
+  String _currentRepMistake = '';
+  DateTime _repStartTime = DateTime.now();
+
+  // Mismatch detection state
+  bool _isMismatch = false;
+  String? _mismatchAlert;
+  int _mismatchConsecutiveFrames = 0;
 
   Map<String, JointEvaluation> _jointEvaluations = {};
   Map<String, JointFormStatus> _boneEvaluations = {};
@@ -92,34 +131,31 @@ class PoseAnalyzerEngine {
 
   int get repCount => _repCount;
   double get formScore => _formScore;
+  bool get isMismatch => _isMismatch;
+  String? get mismatchAlert => _mismatchAlert;
+  List<RepDetail> get repHistory => List.unmodifiable(_repHistory);
 
   void reset() {
     _repCount = 0;
-    _repState = "READY";
-    _formScore = 95.0;
-    _status = "GOOD";
-    _feedbackMessage = "Ready - Stand in camera view";
-    _activeJointAngle = 180.0;
+    _repState = "POSITIONING";
+    _formScore = 0.0;
+    _status = "POSITIONING";
+    _feedbackMessage = "Position yourself in camera view";
+    _activeJointAngle = 0.0;
     _holdTicks = 0;
     _lastVoiceMsg = '';
+    _repHistory.clear();
+    _currentRepAccuracyMin = 100.0;
+    _currentRepMistake = '';
+    _repStartTime = DateTime.now();
+    _isMismatch = false;
+    _mismatchAlert = null;
+    _mismatchConsecutiveFrames = 0;
     _jointEvaluations = {};
     _boneEvaluations = {};
   }
 
   /// Calculates 2D angle (in degrees) between three points with vertex at `b`.
-  static double calculateAngle(
-    PoseLandmark a,
-    PoseLandmark b,
-    PoseLandmark c,
-  ) {
-    return calculatePointAngle(
-      BiometricPoint.fromPoseLandmark(a),
-      BiometricPoint.fromPoseLandmark(b),
-      BiometricPoint.fromPoseLandmark(c),
-    );
-  }
-
-  /// Calculates 2D angle (in degrees) between three biometric points with vertex at `b`.
   static double calculatePointAngle(
     BiometricPoint a,
     BiometricPoint b,
@@ -149,7 +185,7 @@ class PoseAnalyzerEngine {
   }) {
     final lm = pose.landmarks;
 
-    BiometricPoint? getPt(PoseLandmarkType type, {double minLikelihood = 0.45}) {
+    BiometricPoint? getPt(PoseLandmarkType type, {double minLikelihood = 0.40}) {
       final p = lm[type];
       if (p == null || p.likelihood < minLikelihood) return null;
       return BiometricPoint.fromPoseLandmark(p);
@@ -158,7 +194,7 @@ class PoseAnalyzerEngine {
     return _evaluateBiometrics(
       exerciseKey: exerciseKey,
       isYoga: isYoga,
-      nose: getPt(PoseLandmarkType.nose, minLikelihood: 0.25),
+      nose: getPt(PoseLandmarkType.nose, minLikelihood: 0.20),
       lShoulder: getPt(PoseLandmarkType.leftShoulder),
       rShoulder: getPt(PoseLandmarkType.rightShoulder),
       lElbow: getPt(PoseLandmarkType.leftElbow),
@@ -232,6 +268,110 @@ class PoseAnalyzerEngine {
     bool repCompleted = false;
     String? voiceCue;
 
+    final bool hasUpperBody = lShoulder != null || rShoulder != null;
+    final bool hasHips = lHip != null || rHip != null;
+    if (!hasUpperBody && !hasHips) {
+      _status = "POSITIONING";
+      _feedbackMessage = "Step into camera frame so your body is visible";
+      return PoseAnalysisResult(
+        repCount: _repCount,
+        formScore: 0.0,
+        status: "POSITIONING",
+        feedbackMessage: "Step into camera frame so your body is visible",
+        repState: "POSITIONING",
+        activeJointName: "Camera Calibration",
+        activeJointAngle: 0.0,
+        isPersonDetected: false,
+        isFullBodyInFrame: false,
+        positioningInstruction: "Position camera 6-8 feet away at hip height",
+        isMismatch: false,
+        repHistory: _repHistory,
+      );
+    }
+
+    bool fullBodyInFrame = true;
+    String positioningInstruction = "Great position - move smoothly";
+
+    final isLowerBodyEx = [
+      'squat', 'barbell_back_squat', 'front_squat', 'goblet_squat',
+      'lunge', 'walking_lunge', 'bulgarian_split_squat',
+      'tree_pose', 'warrior_2', 'downward_dog'
+    ].contains(exerciseKey);
+
+    if (isLowerBodyEx) {
+      if ((lKnee == null && rKnee == null) || (lAnkle == null && rAnkle == null)) {
+        fullBodyInFrame = false;
+        positioningInstruction = "Step back so your knees and feet are visible";
+        _status = "WARNING";
+        _feedbackMessage = "Step back so knees & feet are in camera view";
+      }
+    }
+
+    // ==========================================
+    // EXERCISE MISMATCH DETECTION ENGINE
+    // ==========================================
+    final mismatch = _detectExerciseMismatch(
+      exerciseKey: exerciseKey,
+      isYoga: isYoga,
+      lShoulder: lShoulder,
+      rShoulder: rShoulder,
+      lHip: lHip,
+      rHip: rHip,
+      lKnee: lKnee,
+      rKnee: rKnee,
+      lAnkle: lAnkle,
+      rAnkle: rAnkle,
+      lElbow: lElbow,
+      rElbow: rElbow,
+      lWrist: lWrist,
+      rWrist: rWrist,
+    );
+
+    if (mismatch != null) {
+      _mismatchConsecutiveFrames++;
+      if (_mismatchConsecutiveFrames >= 6) { // Debounce 6 frames (~0.2s)
+        _isMismatch = true;
+        _mismatchAlert = mismatch;
+        _status = "INCORRECT";
+        _feedbackMessage = mismatch;
+
+        // Voice alert with cooldown
+        final now = DateTime.now();
+        if (now.difference(_lastVoiceTime).inSeconds >= 5) {
+          voiceCue = "Exercise mismatch! Check selected exercise.";
+          _lastVoiceTime = now;
+        }
+
+        return PoseAnalysisResult(
+          repCount: _repCount,
+          formScore: _formScore,
+          status: "INCORRECT",
+          feedbackMessage: mismatch,
+          repState: _repState,
+          activeJointName: _activeJointName,
+          activeJointAngle: _activeJointAngle,
+          repCompletedJustNow: false,
+          voiceCue: voiceCue,
+          holdSeconds: (_holdTicks ~/ 15),
+          isPersonDetected: true,
+          isFullBodyInFrame: fullBodyInFrame,
+          positioningInstruction: positioningInstruction,
+          isMismatch: true,
+          mismatchAlert: mismatch,
+          repHistory: _repHistory,
+          jointEvaluations: _jointEvaluations,
+          boneEvaluations: _boneEvaluations,
+        );
+      }
+    } else {
+      _mismatchConsecutiveFrames = 0;
+      _isMismatch = false;
+      _mismatchAlert = null;
+    }
+
+    // ==========================================
+    // SPECIFIC EXERCISE DISPATCHER
+    // ==========================================
     if (isYoga) {
       _analyzeYogaPose(
         exerciseKey: exerciseKey,
@@ -252,6 +392,9 @@ class PoseAnalyzerEngine {
     } else {
       switch (exerciseKey) {
         case 'squat':
+        case 'barbell_back_squat':
+        case 'front_squat':
+        case 'goblet_squat':
           repCompleted = _analyzeSquat(
             lHip: lHip,
             rHip: rHip,
@@ -265,6 +408,7 @@ class PoseAnalyzerEngine {
           break;
 
         case 'pushup':
+        case 'diamond_pushup':
           repCompleted = _analyzePushup(
             lShoulder: lShoulder,
             rShoulder: rShoulder,
@@ -279,7 +423,25 @@ class PoseAnalyzerEngine {
           );
           break;
 
+        case 'preacher_curl':
+        case 'ez_bar_preacher_curl':
+          repCompleted = _analyzePreacherCurl(
+            lShoulder: lShoulder,
+            rShoulder: rShoulder,
+            lElbow: lElbow,
+            rElbow: rElbow,
+            lWrist: lWrist,
+            rWrist: rWrist,
+            lHip: lHip,
+            rHip: rHip,
+          );
+          break;
+
         case 'bicep_curl':
+        case 'standing_dumbbell_curl':
+        case 'barbell_curl':
+        case 'hammer_curl':
+        case 'alternate_dumbbell_curl':
           repCompleted = _analyzeBicepCurl(
             lShoulder: lShoulder,
             rShoulder: rShoulder,
@@ -292,7 +454,39 @@ class PoseAnalyzerEngine {
           );
           break;
 
+        case 'lateral_raise':
+        case 'cable_lateral_raise':
+        case 'front_raise':
+          repCompleted = _analyzeLateralRaise(
+            lShoulder: lShoulder,
+            rShoulder: rShoulder,
+            lElbow: lElbow,
+            rElbow: rElbow,
+            lWrist: lWrist,
+            rWrist: rWrist,
+            lHip: lHip,
+            rHip: rHip,
+          );
+          break;
+
+        case 'overhead_press':
+        case 'dumbbell_shoulder_press':
+        case 'arnold_press':
+          repCompleted = _analyzeOverheadPress(
+            lShoulder: lShoulder,
+            rShoulder: rShoulder,
+            lElbow: lElbow,
+            rElbow: rElbow,
+            lWrist: lWrist,
+            rWrist: rWrist,
+            lHip: lHip,
+            rHip: rHip,
+          );
+          break;
+
         case 'lunge':
+        case 'walking_lunge':
+        case 'bulgarian_split_squat':
           repCompleted = _analyzeLunge(
             lHip: lHip,
             rHip: rHip,
@@ -306,6 +500,7 @@ class PoseAnalyzerEngine {
           break;
 
         case 'plank':
+        case 'side_plank':
           _analyzePlank(
             lShoulder: lShoulder,
             rShoulder: rShoulder,
@@ -317,16 +512,37 @@ class PoseAnalyzerEngine {
           break;
 
         default:
-          _activeJointName = "Posture Tracking";
+          _activeJointName = "Movement Tracking";
           _status = "GOOD";
           _feedbackMessage = "Tracking active";
       }
     }
 
     if (repCompleted) {
-      voiceCue = "Rep $_repCount! Good form.";
+      final double repScore = _currentRepAccuracyMin.clamp(60.0, 100.0);
+      final bool isClean = repScore >= 85.0;
+      final duration = DateTime.now().difference(_repStartTime).inMilliseconds / 1000.0;
+
+      _repHistory.add(
+        RepDetail(
+          repNumber: _repCount,
+          accuracyScore: repScore,
+          isClean: isClean,
+          feedback: _currentRepMistake.isNotEmpty ? _currentRepMistake : "Great form!",
+          durationSec: duration,
+        ),
+      );
+
+      voiceCue = isClean
+          ? "Rep $_repCount! Clean form."
+          : "Rep $_repCount logged. Watch your form.";
+
+      // Reset for next rep
+      _currentRepAccuracyMin = 100.0;
+      _currentRepMistake = '';
+      _repStartTime = DateTime.now();
     } else {
-      // Throttle form alerts to voice every 4 seconds
+      // Throttle form corrections to voice every 4 seconds
       final now = DateTime.now();
       if (_status != "GOOD" &&
           _feedbackMessage != _lastVoiceMsg &&
@@ -348,12 +564,90 @@ class PoseAnalyzerEngine {
       repCompletedJustNow: repCompleted,
       voiceCue: voiceCue,
       holdSeconds: (_holdTicks ~/ 15),
+      isPersonDetected: true,
+      isFullBodyInFrame: fullBodyInFrame,
+      positioningInstruction: positioningInstruction,
+      isMismatch: false,
+      repHistory: _repHistory,
       jointEvaluations: _jointEvaluations,
       boneEvaluations: _boneEvaluations,
     );
   }
 
-  // ===================== SQUAT ANALYSIS =====================
+  // ==========================================
+  // EXERCISE MISMATCH DETECTOR
+  // ==========================================
+  String? _detectExerciseMismatch({
+    required String exerciseKey,
+    required bool isYoga,
+    BiometricPoint? lShoulder,
+    BiometricPoint? rShoulder,
+    BiometricPoint? lHip,
+    BiometricPoint? rHip,
+    BiometricPoint? lKnee,
+    BiometricPoint? rKnee,
+    BiometricPoint? lAnkle,
+    BiometricPoint? rAnkle,
+    BiometricPoint? lElbow,
+    BiometricPoint? rElbow,
+    BiometricPoint? lWrist,
+    BiometricPoint? rWrist,
+  }) {
+    final shoulder = lShoulder ?? rShoulder;
+    final hip = lHip ?? rHip;
+    final ankle = lAnkle ?? rAnkle;
+
+    if (shoulder == null || hip == null) return null;
+
+    // Calculate torso verticality (difference in Y vs X)
+    final double deltaY = (hip.y - shoulder.y).abs();
+    final double deltaX = (hip.x - shoulder.x).abs();
+    final bool isBodyHorizontal = deltaY < 0.25 && deltaX >= 0.22;
+    final bool isBodyUpright = deltaY >= 0.25 && deltaX < 0.22;
+
+    // 1. User selected SQUAT or LUNGE, but is horizontal (like in pushup/plank)
+    if (['squat', 'barbell_back_squat', 'front_squat', 'goblet_squat', 'lunge', 'walking_lunge'].contains(exerciseKey)) {
+      if (isBodyHorizontal) {
+        return "⚠️ Mismatch Alert: Horizontal stance detected! You appear to be doing Push-Ups, but Squat is selected. Please stand up.";
+      }
+    }
+
+    // 2. User selected PUSHUP or PLANK, but is standing upright
+    if (['pushup', 'diamond_pushup', 'plank'].contains(exerciseKey)) {
+      if (isBodyUpright && ankle != null && (ankle.y - hip.y) > 0.25) {
+        return "⚠️ Mismatch Alert: Upright standing posture detected! Push-Ups / Plank require a horizontal floor position.";
+      }
+    }
+
+    // 3. User selected BICEP CURL or PREACHER CURL, but is performing deep squats
+    if (['bicep_curl', 'preacher_curl', 'ez_bar_preacher_curl', 'standing_dumbbell_curl', 'barbell_curl'].contains(exerciseKey)) {
+      final knee = lKnee ?? rKnee;
+      if (knee != null && ankle != null) {
+        final kneeAngle = calculatePointAngle(hip, knee, ankle);
+        if (kneeAngle < 105.0) {
+          return "⚠️ Mismatch Alert: Deep squat motion detected! You selected Arm Curls. Please perform curls or switch to Squats.";
+        }
+      }
+    }
+
+    // 4. User selected LATERAL RAISE, but is curling arms tightly
+    if (['lateral_raise', 'cable_lateral_raise'].contains(exerciseKey)) {
+      final elbow = lElbow ?? rElbow;
+      final wrist = lWrist ?? rWrist;
+      if (elbow != null && wrist != null) {
+        final elbowAngle = calculatePointAngle(shoulder, elbow, wrist);
+        if (elbowAngle < 80.0) {
+          return "⚠️ Mismatch Alert: Arm curling detected! Lateral Raises require raising extended arms outward to shoulder height.";
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ==========================================
+  // 1. SQUAT ANALYSIS
+  // ==========================================
   bool _analyzeSquat({
     BiometricPoint? lHip,
     BiometricPoint? rHip,
@@ -380,17 +674,14 @@ class PoseAnalyzerEngine {
       rKneeAngle = calculatePointAngle(rHip, rKnee, rAnkle);
     }
 
-    double avgKneeAngle = 180.0;
-    if (lKneeAngle != null && rKneeAngle != null) {
-      avgKneeAngle = (lKneeAngle + rKneeAngle) / 2.0;
-    } else {
-      avgKneeAngle = lKneeAngle ?? rKneeAngle ?? 180.0;
-    }
+    final double avgKneeAngle = (lKneeAngle != null && rKneeAngle != null)
+        ? (lKneeAngle + rKneeAngle) / 2.0
+        : (lKneeAngle ?? rKneeAngle ?? 180.0);
 
     _activeJointName = "Knee Flexion";
     _activeJointAngle = avgKneeAngle;
 
-    // Check Torso angle (back rounding / folding)
+    // Check Torso angle (back rounding / forward lean)
     bool isBackRounding = false;
     final shoulder = lShoulder ?? rShoulder;
     final hip = lHip ?? rHip;
@@ -402,21 +693,20 @@ class PoseAnalyzerEngine {
       }
     }
 
-    // Check knee caving (valgus) if both knees and hips are visible
+    // Check knee caving (valgus collapse)
     bool isKneesCaving = false;
     if (lKnee != null && rKnee != null && lHip != null && rHip != null) {
       final kneeDistance = (lKnee.x - rKnee.x).abs();
       final hipDistance = (lHip.x - rHip.x).abs();
-      if (kneeDistance < hipDistance * 0.72 && avgKneeAngle < 125.0) {
+      if (kneeDistance < hipDistance * 0.70 && avgKneeAngle < 125.0) {
         isKneesCaving = true;
       }
     }
 
     bool repScored = false;
-
-    // Evaluate knee status
     JointFormStatus kneeStatus;
     String kneeFeedback;
+
     if (avgKneeAngle > 155.0) {
       kneeStatus = JointFormStatus.good;
       kneeFeedback = "Standing - Ready";
@@ -424,8 +714,8 @@ class PoseAnalyzerEngine {
         _repCount++;
         _repState = "UP";
         _status = "GOOD";
-        _formScore = (_formScore * 0.85 + 98.0 * 0.15).clamp(70.0, 100.0);
-        _feedbackMessage = "✓ Rep $_repCount complete! Great depth.";
+        _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.85 + 98.0 * 0.15).clamp(70.0, 100.0);
+        _feedbackMessage = "✓ Rep $_repCount complete! Excellent depth.";
         repScored = true;
       } else {
         _repState = "READY";
@@ -438,13 +728,15 @@ class PoseAnalyzerEngine {
         kneeStatus = JointFormStatus.warning;
         kneeFeedback = "Good depth, but chest leaning forward";
         _status = "INCORRECT";
-        _formScore = (_formScore - 1.5).clamp(50.0, 100.0);
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 72.0);
+        _currentRepMistake = "Chest leaned forward";
         _feedbackMessage = "⚠️ Keep chest up! Don't round your lower back.";
       } else if (isKneesCaving) {
         kneeStatus = JointFormStatus.incorrect;
         kneeFeedback = "Knees caving inward!";
         _status = "WARNING";
-        _formScore = (_formScore - 1.0).clamp(50.0, 100.0);
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 76.0);
+        _currentRepMistake = "Knees moved inward";
         _feedbackMessage = "⚠️ Push knees outward! Keep in line with toes.";
       } else {
         kneeStatus = JointFormStatus.good;
@@ -469,7 +761,6 @@ class PoseAnalyzerEngine {
       kneeFeedback = "Initiate squat";
     }
 
-    // Register joint evaluations
     if (lKneeAngle != null) {
       _jointEvaluations['LEFT_KNEE'] = JointEvaluation(
         landmarkName: 'LEFT_KNEE',
@@ -489,17 +780,6 @@ class PoseAnalyzerEngine {
       );
     }
 
-    if (hip != null) {
-      _jointEvaluations['LEFT_HIP'] = JointEvaluation(
-        landmarkName: 'LEFT_HIP',
-        angle: avgKneeAngle,
-        status: isBackRounding ? JointFormStatus.incorrect : JointFormStatus.good,
-        feedback: isBackRounding ? "Hips hinged too low / chest collapsed" : "Hips hinged",
-        label: "Hip",
-      );
-    }
-
-    // Register bone statuses
     final legBoneStatus = isKneesCaving ? JointFormStatus.incorrect : kneeStatus;
     _boneEvaluations['LEFT_HIP_LEFT_KNEE'] = legBoneStatus;
     _boneEvaluations['LEFT_KNEE_LEFT_ANKLE'] = legBoneStatus;
@@ -511,7 +791,9 @@ class PoseAnalyzerEngine {
     return repScored;
   }
 
-  // ===================== PUSHUP ANALYSIS =====================
+  // ==========================================
+  // 2. PUSHUP ANALYSIS
+  // ==========================================
   bool _analyzePushup({
     BiometricPoint? lShoulder,
     BiometricPoint? rShoulder,
@@ -547,7 +829,7 @@ class PoseAnalyzerEngine {
     _activeJointName = "Elbow Flexion";
     _activeJointAngle = avgElbowAngle;
 
-    // Check Plank Line / Sagging Hips (Shoulder-Hip-Ankle collinearity)
+    // Check Plank Line / Sagging Hips
     bool isHipSagging = false;
     bool isHipPiking = false;
     final shoulder = lShoulder ?? rShoulder;
@@ -573,7 +855,7 @@ class PoseAnalyzerEngine {
         _repCount++;
         _repState = "UP";
         _status = "GOOD";
-        _formScore = (_formScore * 0.85 + 96.0 * 0.15).clamp(70.0, 100.0);
+        _formScore = (_formScore == 0.0) ? 95.0 : (_formScore * 0.85 + 96.0 * 0.15).clamp(70.0, 100.0);
         _feedbackMessage = "✓ Pushup rep $_repCount logged! Full lockout.";
         repScored = true;
       } else {
@@ -587,12 +869,15 @@ class PoseAnalyzerEngine {
         armStatus = JointFormStatus.warning;
         armFeedback = "Elbow 90° reached, but hips sagging!";
         _status = "INCORRECT";
-        _formScore = (_formScore - 2.0).clamp(50.0, 100.0);
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 70.0);
+        _currentRepMistake = "Hips sagging";
         _feedbackMessage = "⚠️ Core tight! Don't let your hips sag down.";
       } else if (isHipPiking) {
         armStatus = JointFormStatus.warning;
         armFeedback = "Elbow 90° reached, but hips too high";
         _status = "WARNING";
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 78.0);
+        _currentRepMistake = "Hips too high";
         _feedbackMessage = "⚠️ Lower hips into straight plank position.";
       } else {
         armStatus = JointFormStatus.good;
@@ -605,7 +890,6 @@ class PoseAnalyzerEngine {
       armFeedback = "Descending - Lower chest";
     }
 
-    // Register joint evaluations
     if (lElbowAngle != null) {
       _jointEvaluations['LEFT_ELBOW'] = JointEvaluation(
         landmarkName: 'LEFT_ELBOW',
@@ -625,20 +909,7 @@ class PoseAnalyzerEngine {
       );
     }
 
-    final spineStatus = (isHipSagging || isHipPiking)
-        ? JointFormStatus.incorrect
-        : JointFormStatus.good;
-
-    if (hip != null) {
-      _jointEvaluations['LEFT_HIP'] = JointEvaluation(
-        landmarkName: 'LEFT_HIP',
-        angle: 180.0,
-        status: spineStatus,
-        feedback: isHipSagging ? "Hips sagging" : (isHipPiking ? "Hips piking" : "Spine locked"),
-        label: "Core",
-      );
-    }
-
+    final spineStatus = (isHipSagging || isHipPiking) ? JointFormStatus.incorrect : JointFormStatus.good;
     _boneEvaluations['LEFT_SHOULDER_LEFT_ELBOW'] = armStatus;
     _boneEvaluations['LEFT_ELBOW_LEFT_WRIST'] = armStatus;
     _boneEvaluations['RIGHT_SHOULDER_RIGHT_ELBOW'] = armStatus;
@@ -649,7 +920,120 @@ class PoseAnalyzerEngine {
     return repScored;
   }
 
-  // ===================== BICEP CURL ANALYSIS =====================
+  // ==========================================
+  // 3. PREACHER CURL ANALYSIS (Dedicated Module)
+  // ==========================================
+  bool _analyzePreacherCurl({
+    BiometricPoint? lShoulder,
+    BiometricPoint? rShoulder,
+    BiometricPoint? lElbow,
+    BiometricPoint? rElbow,
+    BiometricPoint? lWrist,
+    BiometricPoint? rWrist,
+    BiometricPoint? lHip,
+    BiometricPoint? rHip,
+  }) {
+    double? lElbowAngle;
+    double? rElbowAngle;
+
+    if (lShoulder != null && lElbow != null && lWrist != null) {
+      lElbowAngle = calculatePointAngle(lShoulder, lElbow, lWrist);
+    }
+    if (rShoulder != null && rElbow != null && rWrist != null) {
+      rElbowAngle = calculatePointAngle(rShoulder, rElbow, rWrist);
+    }
+
+    if (lElbowAngle == null && rElbowAngle == null) {
+      _feedbackMessage = "Position arms on preacher pad";
+      _status = "WARNING";
+      return false;
+    }
+
+    final double activeAngle = math.min(lElbowAngle ?? 180.0, rElbowAngle ?? 180.0);
+    _activeJointName = "Preacher Elbow Angle";
+    _activeJointAngle = activeAngle;
+
+    // Monitor upper-arm stability (arm should stay angled on preacher pad, not lifting)
+    bool isLiftingElbows = false;
+    final shoulder = lShoulder ?? rShoulder;
+    final elbow = lElbow ?? rElbow;
+    final hip = lHip ?? rHip;
+    if (shoulder != null && elbow != null && hip != null) {
+      final padAngle = calculatePointAngle(hip, shoulder, elbow);
+      if (padAngle < 25.0 || padAngle > 68.0) {
+        isLiftingElbows = true;
+      }
+    }
+
+    bool repScored = false;
+    JointFormStatus curlStatus;
+    String curlFeedback;
+
+    if (activeAngle > 140.0) {
+      curlStatus = JointFormStatus.good;
+      curlFeedback = "Full extension on pad";
+      if (_repState == "DOWN") {
+        _repCount++;
+        _repState = "UP";
+        _status = "GOOD";
+        _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.85 + 98.0 * 0.15).clamp(70.0, 100.0);
+        _feedbackMessage = "✓ Rep $_repCount! Excellent preacher curl.";
+        repScored = true;
+      } else {
+        _repState = "READY";
+        _status = "GOOD";
+        _feedbackMessage = "Curl bar up against preacher pad";
+      }
+    } else if (activeAngle <= 55.0) {
+      _repState = "DOWN";
+      if (isLiftingElbows) {
+        curlStatus = JointFormStatus.warning;
+        curlFeedback = "Elbows lifting off pad!";
+        _status = "WARNING";
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 75.0);
+        _currentRepMistake = "Elbows lifted off preacher pad";
+        _feedbackMessage = "⚠️ Keep upper arms against the preacher pad! Avoid lifting elbows.";
+      } else {
+        curlStatus = JointFormStatus.good;
+        curlFeedback = "✓ Peak bicep squeeze!";
+        _status = "GOOD";
+        _feedbackMessage = "✓ Peak bicep squeeze! Control the lowering phase.";
+      }
+    } else {
+      curlStatus = JointFormStatus.neutral;
+      curlFeedback = "Curling";
+    }
+
+    if (lElbowAngle != null) {
+      _jointEvaluations['LEFT_ELBOW'] = JointEvaluation(
+        landmarkName: 'LEFT_ELBOW',
+        angle: lElbowAngle,
+        status: isLiftingElbows ? JointFormStatus.warning : curlStatus,
+        feedback: curlFeedback,
+        label: "Pad ${lElbowAngle.toInt()}°",
+      );
+    }
+    if (rElbowAngle != null) {
+      _jointEvaluations['RIGHT_ELBOW'] = JointEvaluation(
+        landmarkName: 'RIGHT_ELBOW',
+        angle: rElbowAngle,
+        status: isLiftingElbows ? JointFormStatus.warning : curlStatus,
+        feedback: curlFeedback,
+        label: "Pad ${rElbowAngle.toInt()}°",
+      );
+    }
+
+    _boneEvaluations['LEFT_SHOULDER_LEFT_ELBOW'] = curlStatus;
+    _boneEvaluations['LEFT_ELBOW_LEFT_WRIST'] = curlStatus;
+    _boneEvaluations['RIGHT_SHOULDER_RIGHT_ELBOW'] = curlStatus;
+    _boneEvaluations['RIGHT_ELBOW_RIGHT_WRIST'] = curlStatus;
+
+    return repScored;
+  }
+
+  // ==========================================
+  // 4. STANDING BICEP CURL ANALYSIS
+  // ==========================================
   bool _analyzeBicepCurl({
     BiometricPoint? lShoulder,
     BiometricPoint? rShoulder,
@@ -676,12 +1060,11 @@ class PoseAnalyzerEngine {
       return false;
     }
 
-    // Choose lead arm (most active / lowest angle)
     final double minAngle = math.min(lElbowAngle ?? 180.0, rElbowAngle ?? 180.0);
     _activeJointName = "Elbow Flexion";
     _activeJointAngle = minAngle;
 
-    // Check elbow flare / swinging (shoulder angle opening)
+    // Check elbow flare / swinging (shoulder flare angle)
     bool isElbowSwinging = false;
     final shoulder = lShoulder ?? rShoulder;
     final elbow = lElbow ?? rElbow;
@@ -704,7 +1087,7 @@ class PoseAnalyzerEngine {
         _repCount++;
         _repState = "UP";
         _status = "GOOD";
-        _formScore = (_formScore * 0.85 + 97.0 * 0.15).clamp(70.0, 100.0);
+        _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.85 + 97.0 * 0.15).clamp(70.0, 100.0);
         _feedbackMessage = "✓ Curl rep $_repCount complete!";
         repScored = true;
       } else {
@@ -718,13 +1101,14 @@ class PoseAnalyzerEngine {
         curlStatus = JointFormStatus.warning;
         curlFeedback = "Elbows flaring / swinging!";
         _status = "WARNING";
-        _formScore = (_formScore - 1.0).clamp(50.0, 100.0);
-        _feedbackMessage = "⚠️ Keep elbows pinned to your sides!";
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 74.0);
+        _currentRepMistake = "Body swinging / elbows flared";
+        _feedbackMessage = "⚠️ Keep elbows close to torso! Avoid swinging.";
       } else {
         curlStatus = JointFormStatus.good;
         curlFeedback = "✓ Peak bicep contraction!";
         _status = "GOOD";
-        _feedbackMessage = "✓ Peak squeeze! Lower weights under control.";
+        _feedbackMessage = "✓ Peak squeeze! Lower the dumbbells slowly.";
       }
     } else {
       curlStatus = JointFormStatus.neutral;
@@ -758,7 +1142,200 @@ class PoseAnalyzerEngine {
     return repScored;
   }
 
-  // ===================== LUNGE ANALYSIS =====================
+  // ==========================================
+  // 5. LATERAL RAISE ANALYSIS
+  // ==========================================
+  bool _analyzeLateralRaise({
+    BiometricPoint? lShoulder,
+    BiometricPoint? rShoulder,
+    BiometricPoint? lElbow,
+    BiometricPoint? rElbow,
+    BiometricPoint? lWrist,
+    BiometricPoint? rWrist,
+    BiometricPoint? lHip,
+    BiometricPoint? rHip,
+  }) {
+    double? lElevation;
+    double? rElevation;
+
+    if (lHip != null && lShoulder != null && lElbow != null) {
+      lElevation = calculatePointAngle(lHip, lShoulder, lElbow);
+    }
+    if (rHip != null && rShoulder != null && rElbow != null) {
+      rElevation = calculatePointAngle(rHip, rShoulder, rElbow);
+    }
+
+    if (lElevation == null && rElevation == null) {
+      _feedbackMessage = "Step into frame holding dumbbells";
+      _status = "WARNING";
+      return false;
+    }
+
+    final double maxElevation = math.max(lElevation ?? 0.0, rElevation ?? 0.0);
+    _activeJointName = "Shoulder Elevation";
+    _activeJointAngle = maxElevation;
+
+    // Check shrugging / raising too high (> 110 degrees)
+    bool isRaisingTooHigh = maxElevation > 105.0;
+
+    bool repScored = false;
+    JointFormStatus raiseStatus;
+    String raiseFeedback;
+
+    if (maxElevation < 30.0) {
+      raiseStatus = JointFormStatus.good;
+      raiseFeedback = "Arms at sides";
+      if (_repState == "DOWN") {
+        _repCount++;
+        _repState = "UP";
+        _status = "GOOD";
+        _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.85 + 97.0 * 0.15).clamp(70.0, 100.0);
+        _feedbackMessage = "✓ Lateral raise rep $_repCount logged!";
+        repScored = true;
+      } else {
+        _repState = "READY";
+        _status = "GOOD";
+        _feedbackMessage = "Raise arms smoothly out to sides";
+      }
+    } else if (maxElevation >= 82.0) {
+      _repState = "DOWN";
+      if (isRaisingTooHigh) {
+        raiseStatus = JointFormStatus.warning;
+        raiseFeedback = "Raised above shoulder plane";
+        _status = "WARNING";
+        _currentRepAccuracyMin = math.min(_currentRepAccuracyMin, 76.0);
+        _currentRepMistake = "Raised above shoulder plane";
+        _feedbackMessage = "⚠️ Stop at shoulder level! Avoid shrugging.";
+      } else {
+        raiseStatus = JointFormStatus.good;
+        raiseFeedback = "✓ Parallel 90° reached!";
+        _status = "GOOD";
+        _feedbackMessage = "✓ Perfect height! Lower weights with control.";
+      }
+    } else {
+      raiseStatus = JointFormStatus.neutral;
+      raiseFeedback = "Raising";
+    }
+
+    if (lElevation != null) {
+      _jointEvaluations['LEFT_SHOULDER'] = JointEvaluation(
+        landmarkName: 'LEFT_SHOULDER',
+        angle: lElevation,
+        status: raiseStatus,
+        feedback: raiseFeedback,
+        label: "Shoulder ${lElevation.toInt()}°",
+      );
+    }
+    if (rElevation != null) {
+      _jointEvaluations['RIGHT_SHOULDER'] = JointEvaluation(
+        landmarkName: 'RIGHT_SHOULDER',
+        angle: rElevation,
+        status: raiseStatus,
+        feedback: raiseFeedback,
+        label: "Shoulder ${rElevation.toInt()}°",
+      );
+    }
+
+    _boneEvaluations['LEFT_SHOULDER_LEFT_ELBOW'] = raiseStatus;
+    _boneEvaluations['RIGHT_SHOULDER_RIGHT_ELBOW'] = raiseStatus;
+
+    return repScored;
+  }
+
+  // ==========================================
+  // 6. OVERHEAD PRESS ANALYSIS
+  // ==========================================
+  bool _analyzeOverheadPress({
+    BiometricPoint? lShoulder,
+    BiometricPoint? rShoulder,
+    BiometricPoint? lElbow,
+    BiometricPoint? rElbow,
+    BiometricPoint? lWrist,
+    BiometricPoint? rWrist,
+    BiometricPoint? lHip,
+    BiometricPoint? rHip,
+  }) {
+    double? lElbowAngle;
+    double? rElbowAngle;
+
+    if (lShoulder != null && lElbow != null && lWrist != null) {
+      lElbowAngle = calculatePointAngle(lShoulder, lElbow, lWrist);
+    }
+    if (rShoulder != null && rElbow != null && rWrist != null) {
+      rElbowAngle = calculatePointAngle(rShoulder, rElbow, rWrist);
+    }
+
+    if (lElbowAngle == null && rElbowAngle == null) {
+      _feedbackMessage = "Hold weights at shoulder level";
+      _status = "WARNING";
+      return false;
+    }
+
+    final double avgAngle = (lElbowAngle != null && rElbowAngle != null)
+        ? (lElbowAngle + rElbowAngle) / 2.0
+        : (lElbowAngle ?? rElbowAngle ?? 90.0);
+
+    _activeJointName = "Overhead Extension";
+    _activeJointAngle = avgAngle;
+
+    bool repScored = false;
+    JointFormStatus pressStatus;
+    String pressFeedback;
+
+    if (avgAngle >= 165.0) {
+      pressStatus = JointFormStatus.good;
+      pressFeedback = "Full overhead lockout";
+      if (_repState == "DOWN") {
+        _repCount++;
+        _repState = "UP";
+        _status = "GOOD";
+        _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.85 + 98.0 * 0.15).clamp(70.0, 100.0);
+        _feedbackMessage = "✓ Overhead Press rep $_repCount locked!";
+        repScored = true;
+      } else {
+        _repState = "READY";
+        _status = "GOOD";
+        _feedbackMessage = "Lower slowly to chin/shoulder level";
+      }
+    } else if (avgAngle <= 90.0) {
+      _repState = "DOWN";
+      pressStatus = JointFormStatus.good;
+      pressFeedback = "Bottom position reached";
+      _status = "GOOD";
+      _feedbackMessage = "Press forcefully overhead!";
+    } else {
+      pressStatus = JointFormStatus.neutral;
+      pressFeedback = "Pressing";
+    }
+
+    if (lElbowAngle != null) {
+      _jointEvaluations['LEFT_ELBOW'] = JointEvaluation(
+        landmarkName: 'LEFT_ELBOW',
+        angle: lElbowAngle,
+        status: pressStatus,
+        feedback: pressFeedback,
+        label: "Press ${lElbowAngle.toInt()}°",
+      );
+    }
+    if (rElbowAngle != null) {
+      _jointEvaluations['RIGHT_ELBOW'] = JointEvaluation(
+        landmarkName: 'RIGHT_ELBOW',
+        angle: rElbowAngle,
+        status: pressStatus,
+        feedback: pressFeedback,
+        label: "Press ${rElbowAngle.toInt()}°",
+      );
+    }
+
+    _boneEvaluations['LEFT_SHOULDER_LEFT_ELBOW'] = pressStatus;
+    _boneEvaluations['RIGHT_SHOULDER_RIGHT_ELBOW'] = pressStatus;
+
+    return repScored;
+  }
+
+  // ==========================================
+  // 7. LUNGE ANALYSIS
+  // ==========================================
   bool _analyzeLunge({
     BiometricPoint? lHip,
     BiometricPoint? rHip,
@@ -829,7 +1406,9 @@ class PoseAnalyzerEngine {
     return repScored;
   }
 
-  // ===================== PLANK ANALYSIS =====================
+  // ==========================================
+  // 8. PLANK ANALYSIS
+  // ==========================================
   void _analyzePlank({
     BiometricPoint? lShoulder,
     BiometricPoint? rShoulder,
@@ -873,6 +1452,7 @@ class PoseAnalyzerEngine {
       plankStatus = JointFormStatus.good;
       plankFeedback = "✓ Perfect straight spine";
       _status = "GOOD";
+      _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.95 + 98.0 * 0.05).clamp(70.0, 100.0);
       _feedbackMessage = "✓ Perfect straight line plank! Hold steady.";
     }
 
@@ -890,7 +1470,9 @@ class PoseAnalyzerEngine {
     _boneEvaluations['RIGHT_HIP_RIGHT_ANKLE'] = plankStatus;
   }
 
-  // ===================== YOGA POSES =====================
+  // ==========================================
+  // 9. YOGA POSES
+  // ==========================================
   void _analyzeYogaPose({
     required String exerciseKey,
     BiometricPoint? nose,
@@ -933,17 +1515,9 @@ class PoseAnalyzerEngine {
             label: "Flare ${bentAngle.toInt()}°",
           );
 
-          _jointEvaluations[isLeftStanding ? 'LEFT_KNEE' : 'RIGHT_KNEE'] = JointEvaluation(
-            landmarkName: isLeftStanding ? 'LEFT_KNEE' : 'RIGHT_KNEE',
-            angle: standingAngle,
-            status: standingAngle > 155.0 ? JointFormStatus.good : JointFormStatus.warning,
-            feedback: "Standing pillar",
-            label: "Base ${standingAngle.toInt()}°",
-          );
-
           if (isBalanceGood) {
             _status = "GOOD";
-            _formScore = (_formScore * 0.9 + 98.0 * 0.1).clamp(70.0, 100.0);
+            _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.9 + 98.0 * 0.1).clamp(70.0, 100.0);
             _feedbackMessage = "✓ Tree Pose: Excellent balance and hip opening!";
           } else {
             _status = "WARNING";
@@ -977,17 +1551,9 @@ class PoseAnalyzerEngine {
             label: "Front ${minKnee.toInt()}°",
           );
 
-          _jointEvaluations[isLeftFront ? 'RIGHT_KNEE' : 'LEFT_KNEE'] = JointEvaluation(
-            landmarkName: isLeftFront ? 'RIGHT_KNEE' : 'LEFT_KNEE',
-            angle: maxKnee,
-            status: isBackLegStraight ? JointFormStatus.good : JointFormStatus.warning,
-            feedback: "Back leg straight",
-            label: "Back ${maxKnee.toInt()}°",
-          );
-
           if (isKneeDepthGood && isBackLegStraight) {
             _status = "GOOD";
-            _formScore = (_formScore * 0.9 + 97.0 * 0.1).clamp(70.0, 100.0);
+            _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.9 + 97.0 * 0.1).clamp(70.0, 100.0);
             _feedbackMessage = "✓ Warrior II: Deep stance, arms parallel to floor!";
           } else {
             _status = "WARNING";
@@ -1018,7 +1584,7 @@ class PoseAnalyzerEngine {
 
           if (isApexGood) {
             _status = "GOOD";
-            _formScore = (_formScore * 0.9 + 98.0 * 0.1).clamp(70.0, 100.0);
+            _formScore = (_formScore == 0.0) ? 96.0 : (_formScore * 0.9 + 98.0 * 0.1).clamp(70.0, 100.0);
             _feedbackMessage = "✓ Downward Dog: Press palms down, spine elongated.";
           } else {
             _status = "WARNING";

@@ -47,7 +47,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#0B0F19] text-slate-100 flex flex-col font-['Inter'] selection:bg-indigo-500 selection:text-white">
       <Header
         onOpenCoach={() => setShowCoachChat(true)}
         onOpenProfile={() => setShowProfileModal(true)}

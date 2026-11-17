@@ -51,10 +51,18 @@ class Exercise(Base):
     category = Column(String, nullable=False) # Chest, Legs, Core, Arms, Shoulders, Full Body
     difficulty = Column(String, default="Beginner")
     target_muscles = Column(String, nullable=False)
+    primary_muscles = Column(String, default="")
+    secondary_muscles = Column(String, default="")
+    equipment = Column(String, default="Bodyweight")
     description = Column(Text, nullable=False)
     instructions = Column(JSON, default=list) # List of instruction strings
     common_mistakes = Column(JSON, default=list)
     calories_per_rep = Column(Float, default=0.4)
+    recommended_sets = Column(String, default="3 Sets")
+    recommended_reps = Column(String, default="10-12 Reps")
+    estimated_duration = Column(String, default="8-10 min")
+    image_url = Column(String, default="")
+    is_ai_supported = Column(Boolean, default=False)
     rules_config = Column(JSON, nullable=False) # FSM thresholds, target angles, joint landmarks
 
 class YogaPose(Base):

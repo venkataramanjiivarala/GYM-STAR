@@ -244,9 +244,9 @@ export async function fetchYogaPoseByKey(key) {
   }
 }
 
-export async function fetchDashboardAnalytics() {
+export async function fetchDashboardAnalytics(timeframe = '7d') {
   try {
-    const res = await fetch(`${BASE_URL}/analytics/dashboard`);
+    const res = await fetch(`${BASE_URL}/analytics/dashboard?timeframe=${timeframe}`);
     if (!res.ok) throw new Error('Failed to fetch analytics');
     return await res.json();
   } catch (err) {

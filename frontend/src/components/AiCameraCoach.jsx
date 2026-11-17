@@ -26,10 +26,10 @@ export default function AiCameraCoach({ selectedExerciseKey = 'squat', isYoga = 
   const [correctReps, setCorrectReps] = useState(0);
   const [incorrectReps, setIncorrectReps] = useState(0);
   const [repState, setRepState] = useState(isYoga ? 'HOLDING' : 'STANDING');
-  const [formScore, setFormScore] = useState(95);
+  const [formScore, setFormScore] = useState(null);
   const [formStatus, setFormStatus] = useState('GOOD'); // GOOD, WARNING, INCORRECT
   const [feedbackMsg, setFeedbackMsg] = useState(
-    isYoga ? '🧘 Perfect balance! Hold steady & breathe deeply.' : '✓ Great Form! Keep your chest upright.'
+    isYoga ? '🧘 Stand in frame. Aligning yoga posture...' : 'Stand in frame to begin tracking.'
   );
   const [jointAffected, setJointAffected] = useState(null);
   const [angles, setAngles] = useState({ knee: 170, hip: 170, elbow: 170, shoulder: 15 });
@@ -468,6 +468,16 @@ export default function AiCameraCoach({ selectedExerciseKey = 'squat', isYoga = 
           className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-10 pointer-events-none"
         />
 
+        {/* Full-Body Positioning Guide Box */}
+        <div className="absolute inset-8 sm:inset-12 border-2 border-dashed border-indigo-400/40 rounded-3xl pointer-events-none flex flex-col items-center justify-between p-4 z-10">
+          <div className="px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-[11px] font-bold text-indigo-300 border border-indigo-500/30">
+            Fit Full Body in Frame
+          </div>
+          <div className="text-[10px] text-slate-300 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md">
+            Stand 6-8 ft away with hands & feet visible
+          </div>
+        </div>
+
         {/* Calibration Progress Overlay */}
         {!isCalibrated && (
           <div className="absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4">
@@ -537,10 +547,10 @@ export default function AiCameraCoach({ selectedExerciseKey = 'squat', isYoga = 
               </span>
               <span
                 className={`text-2xl font-black font-mono ${
-                  formScore >= 85 ? 'text-emerald-400' : 'text-amber-400'
+                  formScore === null ? 'text-slate-400' : formScore >= 85 ? 'text-emerald-400' : 'text-amber-400'
                 }`}
               >
-                {formScore}%
+                {formScore !== null ? `${formScore}%` : '--%'}
               </span>
             </div>
 

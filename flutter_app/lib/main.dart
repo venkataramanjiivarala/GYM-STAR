@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
+import 'core/services/api_service.dart';
 import 'models/user_profile_model.dart';
 import 'screens/home_screen.dart';
 import 'screens/exercises_screen.dart';
@@ -30,6 +31,7 @@ class GymStarApp extends StatelessWidget {
         fontFamily: 'Inter',
         colorScheme: const ColorScheme.dark(
           primary: AppColors.primary,
+          secondary: AppColors.violet,
           surface: AppColors.surfaceDark,
         ),
       ),
@@ -53,6 +55,19 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
   String _activeExerciseKey = 'squat';
   bool _isActiveYoga = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final prof = await ApiService().fetchUserProfile();
+    if (mounted) {
+      setState(() => _userProfile = prof);
+    }
+  }
+
   void _startCameraCoach(String exerciseKey, bool isYoga) {
     setState(() {
       _activeExerciseKey = exerciseKey;
@@ -66,7 +81,10 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => AiCoachChatModal(userName: _userProfile.name),
+      builder: (ctx) => AiCoachChatModal(
+        userName: _userProfile.name,
+        profile: _userProfile,
+      ),
     );
   }
 
@@ -86,6 +104,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    // Preserve tab state using IndexedStack for tabs 0, 1, 3, 4,
+    // while CameraCoachScreen dynamically renders for tab 2
     final List<Widget> screens = [
       HomeScreen(
         profile: _userProfile,
@@ -111,39 +131,50 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
     ];
 
     return Scaffold(
+      backgroundColor: AppColors.bgDark,
       body: screens[_currentIndex],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
-        backgroundColor: AppColors.surfaceDark,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.2),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home, color: AppColors.primary),
-            label: 'Home',
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(
+            top: BorderSide(color: AppColors.borderDark, width: 1),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.fitness_center_outlined),
-            selectedIcon: Icon(Icons.fitness_center, color: AppColors.primary),
-            label: 'Workouts',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.camera_front_outlined),
-            selectedIcon: Icon(Icons.camera_front, color: AppColors.accentNeon),
-            label: 'AI Coach',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.self_improvement_outlined),
-            selectedIcon: Icon(Icons.self_improvement, color: AppColors.primary),
-            label: 'Yoga',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.insights_outlined),
-            selectedIcon: Icon(Icons.insights, color: AppColors.primary),
-            label: 'Progress',
-          ),
-        ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
+          backgroundColor: AppColors.surfaceDark,
+          indicatorColor: AppColors.primary.withValues(alpha: 0.22),
+          elevation: 8,
+          height: 68,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded, color: AppColors.primary),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.fitness_center_outlined),
+              selectedIcon: Icon(Icons.fitness_center_rounded, color: AppColors.primary),
+              label: 'Workouts',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.videocam_outlined),
+              selectedIcon: Icon(Icons.videocam_rounded, color: AppColors.accentNeon),
+              label: 'AI Coach',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.self_improvement_outlined),
+              selectedIcon: Icon(Icons.self_improvement_rounded, color: AppColors.violet),
+              label: 'Yoga',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.insights_outlined),
+              selectedIcon: Icon(Icons.insights_rounded, color: AppColors.primary),
+              label: 'Progress',
+            ),
+          ],
+        ),
       ),
     );
   }

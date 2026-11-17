@@ -1,31 +1,8 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart';
-
 class ApiEndpoints {
-  static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000/api/v1';
-    }
-    try {
-      if (Platform.isAndroid) {
-        // 10.0.2.2 for Android emulator, fallback to localhost for desktop/local port forwarding
-        return 'http://10.0.2.2:8000/api/v1';
-      }
-    } catch (_) {}
-    return 'http://127.0.0.1:8000/api/v1';
-  }
-
-  static String get wsBaseUrl {
-    if (kIsWeb) {
-      return 'ws://127.0.0.1:8000/api/v1/ws/pose-stream';
-    }
-    try {
-      if (Platform.isAndroid) {
-        return 'ws://10.0.2.2:8000/api/v1/ws/pose-stream';
-      }
-    } catch (_) {}
-    return 'ws://127.0.0.1:8000/api/v1/ws/pose-stream';
-  }
+  // Using 127.0.0.1 works for Web, Desktop, and physical Android devices
+  // when connected via USB with 'adb reverse tcp:8000 tcp:8000'.
+  static String get baseUrl => 'http://127.0.0.1:8000/api/v1';
+  static String get wsBaseUrl => 'ws://127.0.0.1:8000/api/v1/ws/pose-stream';
 
   static const String exercises = '/exercises';
   static const String yoga = '/yoga';

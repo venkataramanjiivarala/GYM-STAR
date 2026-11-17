@@ -13,9 +13,10 @@ Write-Host ""
 Write-Host "Available targets:" -ForegroundColor Yellow
 Write-Host "  [1] Chrome (Web Browser)"
 Write-Host "  [2] Windows Desktop"
+Write-Host "  [3] Connected Android Device (USB / Mobile)"
 Write-Host ""
 
-$choice = Read-Host "Pick a target (1 or 2)"
+$choice = Read-Host "Pick a target (1, 2, or 3)"
 
 if ($choice -eq "1") {
     Write-Host "Launching on Chrome..." -ForegroundColor Green
@@ -23,6 +24,11 @@ if ($choice -eq "1") {
 } elseif ($choice -eq "2") {
     Write-Host "Launching on Windows Desktop..." -ForegroundColor Green
     & "C:\Users\raman\flutter\bin\flutter.bat" run -d windows
+} elseif ($choice -eq "3") {
+    Write-Host "Forwarding backend port 8000 to phone..." -ForegroundColor Cyan
+    & "C:\Users\raman\Android\Sdk\platform-tools\adb.exe" reverse tcp:8000 tcp:8000
+    Write-Host "Launching on Connected Android Device..." -ForegroundColor Green
+    & "C:\Users\raman\flutter\bin\flutter.bat" run -d android
 } else {
     Write-Host "Defaulting to Chrome..." -ForegroundColor Yellow
     & "C:\Users\raman\flutter\bin\flutter.bat" run -d chrome

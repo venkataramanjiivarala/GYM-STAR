@@ -56,10 +56,18 @@ class ExerciseSchema(BaseModel):
     category: str
     difficulty: str
     target_muscles: str
+    primary_muscles: Optional[str] = ""
+    secondary_muscles: Optional[str] = ""
+    equipment: Optional[str] = "Bodyweight"
     description: str
     instructions: List[str] = []
     common_mistakes: List[str] = []
     calories_per_rep: float = 0.45
+    recommended_sets: Optional[str] = "3 Sets"
+    recommended_reps: Optional[str] = "10-12 Reps"
+    estimated_duration: Optional[str] = "8-10 min"
+    image_url: Optional[str] = ""
+    is_ai_supported: Optional[bool] = False
     rules_config: Dict[str, Any] = {}
 
     model_config = ConfigDict(from_attributes=True)
