@@ -157,8 +157,12 @@ class _ProgressAnalyticsScreenState extends State<ProgressAnalyticsScreen> {
                   Expanded(
                     child: StatCard(
                       title: 'AVG FORM ACCURACY',
-                      value: '${_dashboard.avgFormScore > 0 ? _dashboard.avgFormScore.toStringAsFixed(1) : 92.5}%',
-                      subtitle: 'Biometric score',
+                      value: _dashboard.avgFormScore > 0
+                          ? '${_dashboard.avgFormScore.toStringAsFixed(1)}%'
+                          : '--',
+                      subtitle: _dashboard.avgFormScore > 0
+                          ? 'Biometric score'
+                          : 'No data yet',
                       color: AppColors.accentNeon,
                       icon: Icons.verified_user_rounded,
                     ),
@@ -280,90 +284,135 @@ class _ProgressAnalyticsScreenState extends State<ProgressAnalyticsScreen> {
                     // Line Chart with smooth curvature and glowing spots
                     SizedBox(
                       height: 200,
-                      child: LineChart(
-                        _buildLineChartData(),
-                      ),
+                      child: _dashboard.recentSessions.isEmpty
+                          ? const Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.show_chart_rounded,
+                                      size: 36, color: AppColors.textMuted),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'No workout data yet',
+                                    style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Complete workouts to see your trend chart',
+                                    style: TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : LineChart(
+                              _buildLineChartData(),
+                            ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Muscle Group Distribution Card
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceDark,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.borderDark),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'MUSCLE GROUP DISTRIBUTION',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.1,
-                        color: AppColors.textMuted,
+              // Muscle Group Distribution — derived from real workout sessions
+              if (_dashboard.recentSessions.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceDark,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.borderDark),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'MUSCLE GROUP DISTRIBUTION',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _muscleBar('Legs & Glutes', 0.42, '42%', AppColors.primary),
-                    const SizedBox(height: 12),
-                    _muscleBar('Chest & Triceps', 0.28, '28%', AppColors.accentNeon),
-                    const SizedBox(height: 12),
-                    _muscleBar('Back & Biceps', 0.18, '18%', AppColors.violet),
-                    const SizedBox(height: 12),
-                    _muscleBar('Core & Stability', 0.12, '12%', AppColors.streakOrange),
-                  ],
+                      const SizedBox(height: 16),
+                      ..._buildMuscleGroupBars(),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
 
-              // Personal Records Section
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceDark,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.borderDark),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'PERSONAL RECORDS (PRS)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.1,
-                        color: AppColors.textMuted,
+              // Personal Records Section — real data only
+              if (_dashboard.totalWorkouts > 0) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceDark,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppColors.borderDark),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PERSONAL RECORDS (PRS)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                          color: AppColors.textMuted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _prPill('Best Form', '98.5%', Icons.verified_user_rounded, AppColors.accentNeon),
-                        const SizedBox(width: 10),
-                        _prPill('Max Reps/Set', '25 reps', Icons.bolt_rounded, AppColors.streakOrange),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _prPill('Longest Hold', '45s', Icons.timer_outlined, AppColors.violet),
-                        const SizedBox(width: 10),
-                        _prPill('Best Streak', '${_dashboard.streakDays > 0 ? _dashboard.streakDays : 7} Days', Icons.local_fire_department_rounded, AppColors.primary),
-                      ],
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _prPill(
+                            'Best Form',
+                            _dashboard.avgFormScore > 0
+                                ? '${_dashboard.avgFormScore.toStringAsFixed(1)}%'
+                                : '--',
+                            Icons.verified_user_rounded,
+                            AppColors.accentNeon,
+                          ),
+                          const SizedBox(width: 10),
+                          _prPill(
+                            'Total Reps',
+                            '${_dashboard.totalReps}',
+                            Icons.bolt_rounded,
+                            AppColors.streakOrange,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _prPill(
+                            'Active Minutes',
+                            '${_dashboard.totalActiveMinutes} min',
+                            Icons.timer_outlined,
+                            AppColors.violet,
+                          ),
+                          const SizedBox(width: 10),
+                          _prPill(
+                            'Best Streak',
+                            '${_dashboard.streakDays} Days',
+                            Icons.local_fire_department_rounded,
+                            AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
+              ],
 
               // Recent Recorded Workout History
               const Text(
@@ -471,6 +520,53 @@ class _ProgressAnalyticsScreenState extends State<ProgressAnalyticsScreen> {
     );
   }
 
+  /// Builds muscle bar widgets from real session workout types
+  List<Widget> _buildMuscleGroupBars() {
+    // Map workout type keywords to muscle groups
+    final Map<String, int> counts = {
+      'Legs & Glutes': 0,
+      'Chest & Triceps': 0,
+      'Back & Biceps': 0,
+      'Core & Stability': 0,
+      'Shoulders': 0,
+    };
+
+    for (final s in _dashboard.recentSessions) {
+      final wt = s.workoutType.toLowerCase();
+      if (wt.contains('squat') || wt.contains('lunge') || wt.contains('leg') || wt.contains('glute')) {
+        counts['Legs & Glutes'] = counts['Legs & Glutes']! + 1;
+      } else if (wt.contains('push') || wt.contains('chest') || wt.contains('tricep') || wt.contains('dip')) {
+        counts['Chest & Triceps'] = counts['Chest & Triceps']! + 1;
+      } else if (wt.contains('pull') || wt.contains('row') || wt.contains('curl') || wt.contains('bicep') || wt.contains('deadlift')) {
+        counts['Back & Biceps'] = counts['Back & Biceps']! + 1;
+      } else if (wt.contains('plank') || wt.contains('core') || wt.contains('crunch') || wt.contains('abs') || wt.contains('mountain')) {
+        counts['Core & Stability'] = counts['Core & Stability']! + 1;
+      } else if (wt.contains('press') || wt.contains('raise') || wt.contains('shoulder') || wt.contains('overhead')) {
+        counts['Shoulders'] = counts['Shoulders']! + 1;
+      } else {
+        counts['Core & Stability'] = counts['Core & Stability']! + 1;
+      }
+    }
+
+    final total = counts.values.fold(0, (a, b) => a + b);
+    if (total == 0) return [];
+
+    final colors = [AppColors.primary, AppColors.accentNeon, AppColors.violet, AppColors.streakOrange, AppColors.purple];
+    final entries = counts.entries.where((e) => e.value > 0).toList();
+
+    return entries.asMap().entries.map((mapEntry) {
+      final idx = mapEntry.key;
+      final entry = mapEntry.value;
+      final ratio = entry.value / total;
+      final pct = '${(ratio * 100).round()}%';
+      final color = colors[idx % colors.length];
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _muscleBar(entry.key, ratio, pct, color),
+      );
+    }).toList();
+  }
+
   Widget _muscleBar(String label, double ratio, String percent, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +628,7 @@ class _ProgressAnalyticsScreenState extends State<ProgressAnalyticsScreen> {
     for (int i = 0; i < trend.length; i++) {
       double yVal = 0.0;
       if (_selectedMetricIndex == 0) {
-        yVal = trend[i].formScore > 0 ? trend[i].formScore : 88.0;
+        yVal = trend[i].formScore > 0 ? trend[i].formScore : 0.0;
       } else if (_selectedMetricIndex == 1) {
         yVal = trend[i].reps.toDouble();
       } else {
