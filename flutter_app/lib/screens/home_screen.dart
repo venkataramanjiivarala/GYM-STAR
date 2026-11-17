@@ -109,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(7),
@@ -120,13 +121,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white, size: 18),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'GYM STAR',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-                fontSize: 18,
-                color: AppColors.textPrimary,
+            const Flexible(
+              child: Text(
+                'GYM STAR',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                  fontSize: 18,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
           ],
@@ -195,8 +200,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     // ── Quick Start Exercises ──────────────────────────
                     const _SectionLabel(label: 'QUICK START — AI WORKOUTS'),
                     const SizedBox(height: 10),
-                    _QuickStartGrid(onStartCamera: widget.onStartCamera,
-                        onViewDetails: _showExerciseDetail),
+                    _QuickStartGrid(
+                      onStartCamera: widget.onStartCamera,
+                      onViewDetails: _showExerciseDetail,
+                    ),
                     const SizedBox(height: 20),
 
                     // ── Recent Sessions ────────────────────────────────
@@ -215,8 +222,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _RecentSessionsList(sessions: _dashboard.recentSessions,
-                        onStartCamera: widget.onStartCamera),
+                    _RecentSessionsList(
+                      sessions: _dashboard.recentSessions,
+                      onStartCamera: widget.onStartCamera,
+                    ),
                   ],
                 ),
               ),
@@ -243,11 +252,12 @@ class _TodayStats {
   final double calories;
   final int minutes;
   final int sessions;
-  const _TodayStats(
-      {required this.reps,
-      required this.calories,
-      required this.minutes,
-      required this.sessions});
+  const _TodayStats({
+    required this.reps,
+    required this.calories,
+    required this.minutes,
+    required this.sessions,
+  });
 }
 
 // ─── Greeting Card ────────────────────────────────────────────────────────────
@@ -266,7 +276,7 @@ class _GreetingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(22),
@@ -278,71 +288,78 @@ class _GreetingCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$greeting, ${profile.name} 👋',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  profile.primaryGoal,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.80),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ElevatedButton.icon(
-                  onPressed: onStartWorkout,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                  label: const Text('Start AI Workout',
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$greeting, ${profile.name} 👋',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      profile.primaryGoal,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 13)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primaryDark,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  profile.fitnessLevel.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.6,
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: Colors.white.withValues(alpha: 0.22)),
-            ),
-            child: Text(
-              profile.fitnessLevel.toUpperCase(),
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.6,
               ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: onStartWorkout,
+            icon: const Icon(Icons.play_arrow_rounded, size: 20),
+            label: const Text(
+              'Start AI Workout',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primaryDark,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 2,
             ),
           ),
         ],
@@ -381,7 +398,7 @@ class _TodayStatsRow extends StatelessWidget {
     if (!hasActivity) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
           borderRadius: BorderRadius.circular(18),
@@ -390,7 +407,7 @@ class _TodayStatsRow extends StatelessWidget {
         child: const Column(
           children: [
             Icon(Icons.fitness_center_rounded,
-                size: 32, color: AppColors.textMuted),
+                size: 30, color: AppColors.textMuted),
             SizedBox(height: 8),
             Text(
               'No workout recorded today',
@@ -419,21 +436,21 @@ class _TodayStatsRow extends StatelessWidget {
           label: 'Reps',
           color: AppColors.primary,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _StatTile(
           icon: Icons.local_fire_department_rounded,
           value: '${today.calories.toInt()}',
           label: 'kcal',
           color: AppColors.streakOrange,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _StatTile(
           icon: Icons.timer_outlined,
           value: '${today.minutes}',
           label: 'min',
           color: AppColors.accentNeon,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _StatTile(
           icon: Icons.check_circle_rounded,
           value: '${today.sessions}',
@@ -450,41 +467,52 @@ class _StatTile extends StatelessWidget {
   final String value;
   final String label;
   final Color color;
-  const _StatTile(
-      {required this.icon,
-      required this.value,
-      required this.label,
-      required this.color});
+  const _StatTile({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.borderDark),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: color,
-                letterSpacing: -0.5,
+            Icon(icon, color: color, size: 19),
+            const SizedBox(height: 5),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                  letterSpacing: -0.5,
+                ),
               ),
             ),
-            Text(
-              label,
-              style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary),
+              ),
             ),
           ],
         ),
@@ -498,8 +526,10 @@ class _QuickStartGrid extends StatelessWidget {
   final Function(String, bool) onStartCamera;
   final Function(Exercise) onViewDetails;
 
-  const _QuickStartGrid(
-      {required this.onStartCamera, required this.onViewDetails});
+  const _QuickStartGrid({
+    required this.onStartCamera,
+    required this.onViewDetails,
+  });
 
   static const _exercises = [
     {'key': 'squat', 'name': 'Squat', 'icon': Icons.accessibility_new_rounded, 'muscle': 'Legs'},
@@ -519,7 +549,7 @@ class _QuickStartGrid extends StatelessWidget {
         crossAxisCount: 3,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 0.95,
+        childAspectRatio: 0.82,
       ),
       itemCount: _exercises.length,
       itemBuilder: (ctx, i) {
@@ -556,7 +586,7 @@ class _QuickExerciseCard extends StatelessWidget {
     return GestureDetector(
       onTap: onStart,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
           borderRadius: BorderRadius.circular(16),
@@ -566,35 +596,39 @@ class _QuickExerciseCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: AppColors.primaryGradient,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.white, size: 22),
+              child: Icon(icon, color: Colors.white, size: 20),
             ),
-            const SizedBox(height: 8),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+            const SizedBox(height: 7),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                name,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              muscle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                muscle,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w500),
+              ),
             ),
           ],
         ),
@@ -608,15 +642,17 @@ class _RecentSessionsList extends StatelessWidget {
   final List<RecentSession> sessions;
   final Function(String, bool) onStartCamera;
 
-  const _RecentSessionsList(
-      {required this.sessions, required this.onStartCamera});
+  const _RecentSessionsList({
+    required this.sessions,
+    required this.onStartCamera,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (sessions.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
           borderRadius: BorderRadius.circular(18),
@@ -625,7 +661,7 @@ class _RecentSessionsList extends StatelessWidget {
         child: Column(
           children: [
             const Icon(Icons.history_rounded,
-                size: 32, color: AppColors.textMuted),
+                size: 30, color: AppColors.textMuted),
             const SizedBox(height: 8),
             const Text(
               'No sessions yet',
@@ -676,9 +712,10 @@ class _RecentSessionsList extends StatelessWidget {
             border: Border.all(color: AppColors.borderDark),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(9),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12),
@@ -700,9 +737,10 @@ class _RecentSessionsList extends StatelessWidget {
                           fontSize: 14,
                           color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Wrap(
                       spacing: 6,
+                      runSpacing: 4,
                       children: [
                         if (s.totalReps > 0)
                           _Chip(
@@ -733,12 +771,15 @@ class _RecentSessionsList extends StatelessWidget {
                   border: Border.all(
                       color: color.withValues(alpha: 0.3)),
                 ),
-                child: Text(
-                  '${s.avgFormScore.toInt()}%',
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w900,
-                      color: color),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${s.avgFormScore.toInt()}%',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                        color: color),
+                  ),
                 ),
               ),
             ],
